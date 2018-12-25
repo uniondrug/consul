@@ -1,0 +1,19 @@
+{
+    "name" : "uniondrug/consul",
+    "description" : "Uniondrug Consul Manager",
+    "license" : "MIT",
+    "type" : "library",
+    "authors" : [
+        {
+            "name" : "Uniondrug Dev Team",
+            "email" : "dev@uniondrug.cn"
+        }
+    ],
+    "require" : {
+    },
+    "autoload" : {
+        "psr-4" : {
+            "Uniondrug\\Consul\\" : "src/"
+        }
+    }
+}
