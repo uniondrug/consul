@@ -18,7 +18,13 @@ class KV
     private static $branchesMapping = [
         'master' => 'production'
     ];
-    private static $consulHost = 'http://192.168.3.195:8500/v1/kv';
+    /**
+     * Consul服务地址
+     * 例如: http://127.0.0.1:8500, 初始化时从
+     * 环境变量CONSUL_CLIENT中提取
+     * @var string
+     */
+    private static $consulHost = '';
     private static $uses = [];
 
     /**
@@ -27,7 +33,14 @@ class KV
      */
     public static function initConfig($e)
     {
+        $client = shell_exec('echo $CONSUL_CLIENT');
+        $client = trim($client);
+        if ($client === '') {
+            $e->getIO()->writeError("[ERROR] can not read environment variable 'CONSUL_CLIENT' of os");
+            return;
+        }
         self::$basePath = getcwd();
+        self::$consulHost = $client;
         include(self::$basePath.'/vendor/autoload.php');
         // 1. 读取分支名称
         $branch = self::getBranchName();
@@ -56,7 +69,7 @@ class KV
         // 5. 递归子项
         self::recursiveConsul($e, $config);
         // 6. 导出/Export
-        self::exportConfigJson($config);
+        self::exportConfigJson($config, $key);
         self::exportConfigFile($config);
     }
 
@@ -81,17 +94,64 @@ class KV
         }
         // 3. return array
         $contents .= "\n";
-        $contents .= "return unserialize('".serialize($data)."');\n";
+        $contents .= self::exportConfigFileData($data);
         file_put_contents(self::$basePath.'/tmp/config.php', $contents);
+    }
+
+    /**
+     * @param      $data
+     * @param bool $ret
+     * @return string
+     */
+    public static function exportConfigFileData(& $data, $ret = true, $tbl = "")
+    {
+        $res = $ret === true ? 'return ' : '';
+        $res .= '[';
+        $comma = "\n";
+        foreach ($data as $key => $value) {
+            $res .= $comma.$tbl."\t";
+            $comma = ", \n";
+            if (!is_numeric($key)) {
+                $res .= '"'.$key.'" => ';
+            }
+            if (is_array($value)) {
+                $res .= self::exportConfigFileData($value, false, "{$tbl}\t");
+            } else {
+                $t = strtolower(gettype($value));
+                switch ($t) {
+                    case 'bool' :
+                    case 'boolean' :
+                        $res .= $value ? 'true' : 'false';
+                        break;
+                    case 'int' :
+                    case 'integer' :
+                    case 'float' :
+                    case 'double' :
+                        $res .= $value;
+                        break;
+                    case 'string' :
+                        $res .= '"'.addslashes(($value)).'"';
+                        break;
+                    case 'null' :
+                        $res .= 'null';
+                        break;
+                    default :
+                        $res .= '""';
+                        break;
+                }
+            }
+        }
+        $res .= "\n{$tbl}]";
+        return $res.($ret === true ? ';' : '');
     }
 
     /**
      * 导出到config.json
      * @param array $data
      */
-    private static function exportConfigJson(array $data)
+    private static function exportConfigJson(array $data, $key)
     {
-        file_put_contents(self::$basePath.'/tmp/config.json', json_encode($data, JSON_PRETTY_PRINT));
+        file_put_contents(self::$basePath.'/tmp/config.json', json_encode([$key => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
     /**
@@ -141,7 +201,7 @@ class KV
      */
     private static function readKeyValue($e, string $key)
     {
-        $url = sprintf("%s/%s", self::$consulHost, $key);
+        $url = sprintf("%s/v1/key/%s", self::$consulHost, $key);
         try {
             $e->getIO()->write("[DEBUG] - send request to consul {$url}");
             $http = new Client();
