@@ -1,22 +1,7 @@
 # Consul
 
-> Consul with application
+> consul manager
 
-```php
-php console consul COMMAND [OPTIONS]
-```
-
-### Commands
-
-1. register
-1. deregister
-1. view
-1. health
-
-### Options
-
-1. --host
-1. --port
-1. --service-host
-1. --service-port
-1. --template
+1. service manager
+2. key/value manager
+3. config manager
