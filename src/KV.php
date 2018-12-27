@@ -95,6 +95,7 @@ class KV
         // 3. return array
         $contents .= "\n";
         $contents .= self::exportConfigFileData($data);
+        self::replaceIpAddr($contents);
         file_put_contents(self::$basePath.'/tmp/config.php', $contents);
     }
 
@@ -151,7 +152,21 @@ class KV
      */
     private static function exportConfigJson(array $data, $key)
     {
-        file_put_contents(self::$basePath.'/tmp/config.json', json_encode([$key => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $contents = json_encode([$key => $data], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        self::replaceIpAddr($contents);
+        file_put_contents(self::$basePath.'/tmp/config.json', $contents);
+    }
+
+    /**
+     * 替换IP
+     * @param string $contents
+     */
+    private static function replaceIpAddr(& $contents)
+    {
+        echo "[INFO] replace ip addr\n";
+        $contents = preg_replace_callback("/([a-z]+\d):(\d+)\"/", function($a){
+            return KV::parseNetwork($a[1]).':'.$a[2].'"';
+        }, $contents);
     }
 
     /**
@@ -215,6 +230,60 @@ class KV
             $e->getIO()->writeError("[ERROR] - unknown response contents");
         } catch(\Throwable $ex) {
             $e->getIO()->writeError("[ERROR] - {$ex->getMessage()}");
+        }
+        return false;
+    }
+
+    /**
+     * 匹配IP地址
+     * @param $host
+     * @return string
+     */
+    public static function parseNetwork($host)
+    {
+        $ip = self::parseNetworkIpadd($host);
+        $ip || $ip = self::parseNetworkIfconfig($host);
+        return $ip ?: '127.0.0.1';
+    }
+
+    /**
+     * @param string $host
+     * @return false|string
+     */
+    public static function parseNetworkIfconfig(string $host)
+    {
+        // 1. read all
+        $cmd = 'ifconfig';
+        $str = shell_exec($cmd);
+        $str = preg_replace("/\n\s+/", " ", $str);
+        // 2. filter host
+        if (preg_match("/({$host}[^\n]+)/", $str, $m) === 0) {
+            return false;
+        }
+        // 3. filter ip addr
+        //    inet addr:10.168.74.190
+        //    inet 192.168.10.116
+        if (preg_match("/inet\s+[a-z:]*(\d+\.\d+\.\d+\.\d+)/", $m[1], $z) > 0) {
+            return $z[1];
+        }
+        return false;
+    }
+
+    /**
+     * 解析IP地址
+     * 以阿里云为例
+     * 1. eth0, 内网IP
+     * 2. eth1, 公网IP
+     * @param string $host
+     * @return false|string
+     */
+    public static function parseNetworkIpadd(string $host)
+    {
+        $cmd = "ip -o -4 addr list '{$host}' | head -n1 | awk '{print \$4}' | cut -d/ -f1";
+        $addr = shell_exec($cmd);
+        $addr = trim($addr);
+        if ($addr !== "" && preg_match("/^\d+\.\d+\.\d+\.\d+$/", $addr) > 0) {
+            return $addr;
         }
         return false;
     }
