@@ -216,7 +216,7 @@ class KV
      */
     private static function readKeyValue($e, string $key)
     {
-        $url = sprintf("%s/v1/key/%s", self::$consulHost, $key);
+        $url = sprintf("%s/v1/kv/%s", self::$consulHost, $key);
         try {
             $e->getIO()->write("[DEBUG] - send request to consul {$url}");
             $http = new Client();
